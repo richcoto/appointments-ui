@@ -54,7 +54,7 @@ type CreateAppointmentPayload = {
   serviceId: number;
   name: string;
   whatsappNumber: string;
-  dateTime: string; // ISO 'Z'
+  dateTime: string; // Local string 'YYYY-MM-DDTHH:mm'
   note?: string;
   employeeId: number;
 };
@@ -89,19 +89,13 @@ function toKey(d: string | Date): string {
   return format(startOfDay(fallback), "yyyy-MM-dd");
 }
 
-// Build ISO UTC from local date + "HH:mm"
-function buildDateTimeISO(date: Date, hhmm: string): string {
-  const [hh, mm] = hhmm.split(":").map((n) => parseInt(n, 10));
-  const local = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-    isNaN(hh) ? 0 : hh,
-    isNaN(mm) ? 0 : mm,
-    0,
-    0
-  );
-  return local.toISOString();
+// Build a LOCAL date-time string (no timezone) like 'YYYY-MM-DDTHH:mm'
+function buildLocalDateTimeString(date: Date, hhmm: string): string {
+  const day = format(date, "yyyy-MM-dd");
+  const [hh, mm] = hhmm.split(":");
+  const safeHH = /^\d{1,2}$/.test(hh ?? "") ? hh!.padStart(2, "0") : "00";
+  const safeMM = /^\d{1,2}$/.test(mm ?? "") ? mm!.padStart(2, "0") : "00";
+  return `${day}T${safeHH}:${safeMM}`;
 }
 
 export default function AppointmentBooking(): JSX.Element {
@@ -296,8 +290,9 @@ export default function AppointmentBooking(): JSX.Element {
     }
 
     // If the currently selected date has no slots for this employee, jump to earliest day for them
-    const hasSlotsToday = (emp.slots?.length ?? 0) > 0 && selectedDayData === daysByKey.get(toKey(selectedDate ?? new Date()));
-    const canToday = hasSlotsToday && (!serviceId || emp.services.some((s) => String(s.id) === serviceId));
+    const canToday =
+      (emp.slots?.length ?? 0) > 0 &&
+      (!serviceId || emp.services.some((s) => String(s.id) === serviceId));
     if (!canToday && earliestAvailableDate) {
       setSelectedDate(earliestAvailableDate);
     }
@@ -333,7 +328,8 @@ export default function AppointmentBooking(): JSX.Element {
         serviceId: Number(serviceId),
         name,
         whatsappNumber: phone,
-        dateTime: buildDateTimeISO(selectedDate, selectedSlot),
+        // send *local* string, e.g. '2025-08-18T09:00'
+        dateTime: buildLocalDateTimeString(selectedDate, selectedSlot),
         note: note || undefined,
         employeeId: Number(employeeId),
       };
